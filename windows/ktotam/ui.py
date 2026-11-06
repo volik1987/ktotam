@@ -338,7 +338,7 @@ class App:
         row = ttk.Frame(box)
         row.pack(fill="x")
         tk.Label(row, text="●", fg=color(p.id), font=("Segoe UI", 12)).pack(side="left")
-        e = ttk.Entry(row, font=("Segoe UI", 11, "bold"))
+        e = ttk.Entry(row, font=("Segoe UI", 11, "bold"), width=10)
         e.insert(0, p.name)
         e.pack(side="left", fill="x", expand=True, padx=4)
         e.bind("<Return>", lambda ev, uid=p.id, w=e: self.m.rename(uid, w.get()))
