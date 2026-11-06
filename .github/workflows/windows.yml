@@ -18,9 +18,9 @@ jobs:
         working-directory: windows
         shell: pwsh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -52,16 +52,16 @@ jobs:
           New-Item -ItemType Directory -Force -Path t/imp/Лена, t/fake | Out-Null
           Invoke-WebRequest https://raw.githubusercontent.com/opencv/opencv/4.x/samples/data/lena.jpg -OutFile t/lena.jpg
           Copy-Item t/lena.jpg t/imp/Лена/1.jpg
-          1..15 | % { Copy-Item t/lena.jpg ("t/fake/{0:D4}_lena.jpg" -f $_) }
-          16..40 | % { New-Item ("t/fake/{0:D4}_empty" -f $_) | Out-Null }
+          1..30 | % { Copy-Item t/lena.jpg ("t/fake/{0:D4}_lena.jpg" -f $_) }
+          31..50 | % { New-Item ("t/fake/{0:D4}_empty" -f $_) | Out-Null }
           $p = Start-Process dist/ktotam/ktotam.exe -ArgumentList "--import","t/imp","--db","t/test.sqlite","--log","import.log" -Wait -PassThru
           Get-Content import.log
-          $p = Start-Process dist/ktotam/ktotam.exe -ArgumentList "--db","t/test.sqlite","--fake-camera","t/fake","--mute","--snapshot","screenshot.png","4","--log","ui.log" -Wait -PassThru
+          $p = Start-Process dist/ktotam/ktotam.exe -ArgumentList "--db","t/test.sqlite","--fake-camera","t/fake","--mute","--snapshot","screenshot.png","3","--log","ui.log" -Wait -PassThru
           Get-Content ui.log
           if (-not (Test-Path screenshot.png)) { Write-Error "нет снимка окна"; exit 1 }
           if (-not (Select-String -Path ui.log -Pattern "Привет, Лена" -Quiet)) { Write-Error "не поздоровался"; exit 1 }
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: ktotam-windows

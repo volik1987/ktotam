@@ -73,8 +73,11 @@ class App:
         self._imgs: dict[str, list] = {"live": [], "people": [], "review": []}
 
         root.title("Кто там")
-        root.geometry("1240x780")
-        root.minsize(1000, 640)
+        # Размер по экрану: на ноутбуке 1366×768 окно 1240×780 не влезло бы вместе с панелью задач.
+        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+        w, h = min(1240, sw - 40), min(780, sh - 90)
+        root.geometry(f"{w}x{h}+{max(0, (sw - w) // 2)}+{max(0, (sh - h - 50) // 2)}")
+        root.minsize(min(900, w), min(560, h))
         try:
             if sys.platform == "win32":
                 root.iconbitmap(resource("assets", "icon.ico"))
@@ -91,7 +94,7 @@ class App:
 
         left = ttk.Frame(root, padding=10)
         left.pack(side="left", fill="both", expand=True)
-        right = ttk.Frame(root, padding=10, width=420)
+        right = ttk.Frame(root, padding=10, width=420 if w >= 1150 else 360)
         right.pack(side="right", fill="y")
         right.pack_propagate(False)
 
