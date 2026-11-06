@@ -1,0 +1,77 @@
+name: Windows
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Зависимости
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pyinstaller
+
+      - name: Автотест (Python)
+        run: python main.py --selftest
+
+      - name: Сборка .exe
+        run: |
+          pyinstaller --noconfirm --windowed --onedir --name ktotam `
+            --icon assets/icon.ico `
+            --add-data "models;models" --add-data "assets;assets" `
+            --hidden-import win32com.client --hidden-import pythoncom `
+            main.py
+          Compress-Archive -Path dist/ktotam -DestinationPath ../ktotam-windows.zip -Force
+
+      - name: Автотест собранного .exe
+        run: |
+          $p = Start-Process dist/ktotam/ktotam.exe -ArgumentList "--selftest","--log","selftest.log" -Wait -PassThru
+          Get-Content selftest.log
+          if ($p.ExitCode -ne 0) { exit 1 }
+
+      - name: Сквозной тест с окном (фото вместо камеры)
+        run: |
+          New-Item -ItemType Directory -Force -Path t/imp/Лена, t/fake | Out-Null
+          Invoke-WebRequest https://raw.githubusercontent.com/opencv/opencv/4.x/samples/data/lena.jpg -OutFile t/lena.jpg
+          Copy-Item t/lena.jpg t/imp/Лена/1.jpg
+          1..15 | % { Copy-Item t/lena.jpg ("t/fake/{0:D4}_lena.jpg" -f $_) }
+          16..40 | % { New-Item ("t/fake/{0:D4}_empty" -f $_) | Out-Null }
+          $p = Start-Process dist/ktotam/ktotam.exe -ArgumentList "--import","t/imp","--db","t/test.sqlite","--log","import.log" -Wait -PassThru
+          Get-Content import.log
+          $p = Start-Process dist/ktotam/ktotam.exe -ArgumentList "--db","t/test.sqlite","--fake-camera","t/fake","--mute","--snapshot","screenshot.png","4","--log","ui.log" -Wait -PassThru
+          Get-Content ui.log
+          if (-not (Test-Path screenshot.png)) { Write-Error "нет снимка окна"; exit 1 }
+          if (-not (Select-String -Path ui.log -Pattern "Привет, Лена" -Quiet)) { Write-Error "не поздоровался"; exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ktotam-windows
+          path: |
+            ktotam-windows.zip
+            windows/screenshot.png
+            windows/*.log
+
+      - name: В релиз
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" ../ktotam-windows.zip --clobber

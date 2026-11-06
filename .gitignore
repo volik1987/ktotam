@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.pyc
+macos/build/
+windows/.venv/
+windows/build/
+windows/dist/
+windows/*.spec
+*.sqlite
+macos/tools/vfs.yaml
+macos/tools/empty.modulemap
