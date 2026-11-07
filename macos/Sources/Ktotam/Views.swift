@@ -368,7 +368,7 @@ struct SettingsPane: View {
             Section("Узнавание") {
                 VStack(alignment: .leading) {
                     Text("Порог «узнал»: \(String(format: "%.2f", m.threshold))")
-                    Slider(value: $m.threshold, in: 0.25...0.7, step: 0.01)
+                    Slider(value: $m.threshold, in: 0.6...1.25, step: 0.01)
                     Text("Меньше — строже (чаще «не знаю»), больше — смелее (чаще путает). Ориентир — число «расстояние» у лица в кадре.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }

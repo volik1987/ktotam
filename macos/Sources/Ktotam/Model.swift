@@ -92,8 +92,13 @@ final class Model: ObservableObject {
     init(dbPath: String = Store.defaultPath, fakeFolder: URL? = nil) {
         store = Store(path: dbPath)
         self.fakeFolder = fakeFolder
-        d.register(defaults: ["threshold": 0.42, "absence": 3.0, "speak": true, "greetUnknown": false,
+        d.register(defaults: ["threshold": 0.95, "absence": 3.0, "speak": true, "greetUnknown": false,
                               "autoLearn": false, "mirror": true])
+        // Порог зависит от модели: при переходе на SFace (версия 3) старое значение не подходит.
+        if d.integer(forKey: "engineVersion") != FaceEngine.version {
+            d.removeObject(forKey: "threshold")
+            d.set(FaceEngine.version, forKey: "engineVersion")
+        }
         threshold = d.double(forKey: "threshold")
         absence = d.double(forKey: "absence")
         speak = d.bool(forKey: "speak")
@@ -137,12 +142,20 @@ final class Model: ObservableObject {
     }
 
     /// Снимки, посчитанные старым алгоритмом, пересчитываем из сохранённых кропов.
+    /// Кропы 160 (версии 1–2, VNFeaturePrint) переводим в кроп 112 для SFace по известному положению глаз.
     private func migrateEmbeddings() {
+        var n = 0
         for s in store.samples() where s.version != FaceEngine.version {
-            guard let j = store.jpeg(of: s.id), let img = FaceEngine.cgImage(jpeg: j),
-                  let e = engine.embedding(img) else { continue }
-            store.updateEmb(s.id, e, version: FaceEngine.version)
+            guard let j = store.jpeg(of: s.id), var img = FaceEngine.cgImage(jpeg: j) else { continue }
+            if s.version < 3 && img.width != Int(FaceEngine.side) {
+                guard let r = engine.realignOld(img) else { continue }
+                img = r
+            }
+            guard let e = engine.embedding(img) else { continue }
+            store.replaceSample(s.id, jpeg: engine.jpeg(img), emb: e, version: FaceEngine.version)
+            n += 1
         }
+        if n > 0 { log("База переведена на новую модель SFace: пересчитано снимков \(n)") }
     }
 
     func refreshPeople() {

@@ -171,7 +171,7 @@ enum SelfTest {
         var knownD: [(Float, Bool)] = test.map { let m = rec.match($0.emb); return (m.dist, m.best == $0.userId) }
         knownD.sort { $0.0 < $1.0 }
         print("  порог → узнаёт своих верно / принимает чужого за своего:")
-        for t in stride(from: Float(0.25), through: 0.6, by: 0.05) {
+        for t in stride(from: Float(0.8), through: 1.3, by: 0.05) {
             let acc = Float(knownD.filter { $0.0 <= t && $0.1 }.count) / Float(knownD.count)
             let far = Float(strangerD.filter { $0 <= t }.count) / Float(max(strangerD.count, 1))
             print(String(format: "    %.2f → %5.1f%% / %5.1f%%", t, acc * 100, far * 100))

@@ -13,7 +13,7 @@
 | Папка | [`macos/`](macos) | [`windows/`](windows) |
 | Язык | Swift + SwiftUI | Python + Tk (собирается в .exe) |
 | Поиск лица | Apple Vision | OpenCV YuNet |
-| Распознавание | Vision FeaturePrint (общий «отпечаток» картинки) | SFace — модель распознавания лиц |
+| Распознавание | SFace (Core ML, нейроядро Apple Silicon) | SFace (OpenCV) |
 | Голос | AVSpeechSynthesizer (Milena) | Голоса Windows (SAPI) |
 | Камера | встроенная / USB / Continuity | встроенная / USB / IP-камера `rtsp://…` |
 | База | `~/Library/Application Support/Ktotam/faces.sqlite` | `%APPDATA%\Ktotam\faces.sqlite` |
@@ -50,8 +50,11 @@
 
 | | по одному кадру | с голосованием трека | чужого принимает за своего |
 |---|---|---|---|
-| macOS (Vision, порог 0.42) | 98,0% | 100% | ~8% кадров |
+| macOS (SFace, порог 0.95) | 99,9% | 100% | 0% |
 | Windows (SFace, порог 0.95) | 99,9% | 100% | 0% |
+
+В обеих версиях одна и та же модель лиц — SFace. До версии 1.1 мак-версия распознавала через Vision FeaturePrint
+(98% и ~8% ложных узнаваний незнакомцев); база при обновлении переводится сама, переобучать людей не нужно.
 
 ## Сборка и тесты
 
@@ -77,5 +80,5 @@ python main.py --selftest [папка]      # тесты
 Снимки лиц — биометрические персональные данные. Если ставите программу не только для себя
 (например, в офисе), нужно письменное согласие людей, которых она узнаёт.
 
-Модели YuNet (MIT) и SFace (Apache 2.0) — из [OpenCV Zoo](https://github.com/opencv/opencv_zoo).
+Модели YuNet (MIT) и SFace (Apache 2.0) — из [OpenCV Zoo](https://github.com/opencv/opencv_zoo); для macOS SFace переведена в Core ML (`macos/models/SFace.mlmodelc`).
 Код — MIT.

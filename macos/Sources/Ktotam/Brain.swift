@@ -13,8 +13,8 @@ struct Match {
 /// Узнавание ближайшими соседями: для каждого человека берём среднее k самых близких его снимков.
 final class Recognizer {
     private(set) var byUser: [Int64: [[Float]]] = [:]
-    var threshold: Float = 0.42     // дальше — «не знаю»
-    var margin: Float = 0.015       // насколько лучший должен опережать второго
+    var threshold: Float = 0.95     // дальше — «не знаю»
+    var margin: Float = 0.03        // насколько лучший должен опережать второго
     var k = 3
     var maxPerUser = 400
 

@@ -22,6 +22,8 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp build/Ktotam "$APP/Contents/MacOS/Ktotam"
 cp Info.plist "$APP/Contents/Info.plist"
+# Модель распознавания лиц SFace (Core ML, ~37 МБ) — см. tools/convert_sface.py
+cp -R models/SFace.mlmodelc "$APP/Contents/Resources/"
 # Иконка в стиле ADE (белая плашка, логотип, подпись, зелёная полоса)
 # плюс значок Face ID — tools/mkicon_ktotam.m
 if [ ! -f build/AppIcon.icns ] || [ tools/mkicon_ktotam.m -nt build/AppIcon.icns ]; then

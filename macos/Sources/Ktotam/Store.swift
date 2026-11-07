@@ -169,6 +169,17 @@ final class Store {
         sqlite3_step(st)
     }
 
+    /// Новый кроп и вектор (при переходе на другое выравнивание/модель).
+    func replaceSample(_ sample: Int64, jpeg: Data, emb: [Float], version: Int) {
+        let st = prepare("UPDATE samples SET jpeg=?, emb=?, version=? WHERE id=?")
+        defer { sqlite3_finalize(st) }
+        bind(st, 1, jpeg)
+        bind(st, 2, emb.withUnsafeBufferPointer { Data(buffer: $0) })
+        sqlite3_bind_int(st, 3, Int32(version))
+        sqlite3_bind_int64(st, 4, sample)
+        sqlite3_step(st)
+    }
+
     func deleteSample(_ id: Int64) {
         let st = prepare("DELETE FROM samples WHERE id=?")
         defer { sqlite3_finalize(st) }
