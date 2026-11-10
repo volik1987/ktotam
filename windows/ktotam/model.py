@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .b24 import B24Client
 from .brain import UNKNOWN, Match, Presence, Recognizer, Tracker
 from .engine import FaceEngine, FaceHit
 from .speaker import Speaker
@@ -34,11 +35,12 @@ class Review:
 
 
 DEFAULTS = {"threshold": 0.95, "absence": 3.0, "speak": True, "greet_unknown": False,
-            "auto_learn": False, "mirror": True, "voice": "", "camera": "0"}
+            "auto_learn": False, "mirror": True, "voice": "", "camera": "0",
+            "b24_url": "", "b24_device": "", "b24_token": "", "b24_user": 0, "b24_user_name": ""}
 
 
 class Model:
-    def __init__(self, db_path: str, engine: FaceEngine, mute: bool = False):
+    def __init__(self, db_path: str, engine: FaceEngine, mute: bool = False, b24: bool = True):
         self.store = Store(db_path)
         self.engine = engine
         self.rec = Recognizer()
@@ -65,6 +67,7 @@ class Model:
         except (OSError, ValueError):
             pass
         self.apply_settings()
+        self.b24 = B24Client(self.s, self.set) if b24 else None
         self.refresh_people()
         self._migrate()
         self.rec.rebuild(self.store.samples())
@@ -94,6 +97,34 @@ class Model:
     def refresh_people(self):
         self.people = self.store.people()
         self.revision += 1
+        if self.b24:
+            self.b24.set_persons([{"name": p.name, "user": p.b24, "samples": p.count} for p in self.people])
+
+    def b24_of(self, uid) -> int:
+        return next((p.b24 for p in self.people if p.id == uid), 0)
+
+    def link_b24(self, uid: int, b24: int):
+        """Связать человека из базы с сотрудником портала (0 — отвязать)."""
+        self.store.set_b24(uid, b24)
+        self.refresh_people()
+
+    def tick_b24(self):
+        """Из потока интерфейса: проговорить пришедшие с портала сообщения, перенести заметки в журнал."""
+        if not self.b24:
+            return
+        try:
+            while True:
+                self.log(self.b24.notes.get_nowait())
+        except Exception:
+            pass
+        try:
+            while True:
+                text = self.b24.inbox.get_nowait()
+                self.log("🔊 " + text)
+                if not self.mute:
+                    self.speaker.say(text)
+        except Exception:
+            pass
 
     def name(self, uid) -> str:
         if uid is None:
@@ -157,6 +188,8 @@ class Model:
             self._greet(u, False)
         for u in hello:
             self._greet(u, True)
+        if self.b24:
+            self.b24.set_present(self.b24_of(u) for u in self.presence.present if u > 0)
 
     def _greet(self, u: int, hello: bool):
         who = self.name(u)
@@ -164,6 +197,9 @@ class Model:
         self.log(("👋 " if hello else "🚪 ") + text)
         if self.s["speak"] and not self.mute:
             self.speaker.say(text)
+        if self.b24:
+            b24 = self.b24_of(u) if u > 0 else 0
+            self.b24.event("appeared" if hello else "left", b24, who if u > 0 else "")
 
     # --- обучение
     def _add(self, crop, emb, u: int, source: str, refresh: bool = True):

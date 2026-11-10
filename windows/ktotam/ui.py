@@ -135,13 +135,15 @@ class App:
         self.tab_review = ttk.Frame(self.nb, padding=6)
         self.tab_events = ttk.Frame(self.nb, padding=6)
         self.tab_settings = ttk.Frame(self.nb, padding=6)
+        self.tab_b24 = ttk.Frame(self.nb, padding=6)
         for t, n in ((self.tab_people, "Люди"), (self.tab_review, "Проверка"),
-                     (self.tab_events, "Журнал"), (self.tab_settings, "Настройки")):
+                     (self.tab_events, "Журнал"), (self.tab_settings, "Настройки"), (self.tab_b24, "Б24")):
             self.nb.add(t, text=n)
         self._build_people()
         self._build_review()
         self._build_events()
         self._build_settings()
+        self._build_b24()
 
         self.start_camera()
         root.protocol("WM_DELETE_WINDOW", self.close)
@@ -174,6 +176,8 @@ class App:
             self.update_live()
         if self.cam.error:
             self.lbl_status.config(text=self.cam.error)
+        self.m.tick_b24()
+        self.update_b24()
         self.update_header()
         self.update_people()
         self.update_reviews()
@@ -504,6 +508,87 @@ class App:
         section("База")
         ttk.Label(f, text=self.m.store.path, wraplength=380, style="Small.TLabel").pack(anchor="w")
         ttk.Button(f, text="Открыть папку", command=self._open_folder).pack(anchor="w", pady=2)
+
+    # ---------- Битрикс24
+    def _build_b24(self):
+        f = self.tab_b24
+        self._b24_sig = None
+        ttk.Label(f, text="Битрикс24", font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        ttk.Label(f, wraplength=380, style="Small.TLabel",
+                  text="Портал узнаёт, кто из сотрудников перед экраном, и присылает голосовые сообщения. "
+                       "На портал уходят только «появился / ушёл» и время — снимки и данные лиц остаются здесь."
+                  ).pack(anchor="w", pady=(0, 6))
+        row = ttk.Frame(f)
+        row.pack(fill="x")
+        ttk.Label(row, text="Адрес:").pack(side="left")
+        self.b24_url = ttk.Entry(row)
+        self.b24_url.insert(0, self.m.s.get("b24_url", "").replace("https://", ""))
+        self.b24_url.pack(side="left", fill="x", expand=True, padx=6)
+        self.b24_btn = ttk.Button(row, text="Подключить", command=self._b24_toggle)
+        self.b24_btn.pack(side="left")
+        self.b24_url.bind("<Return>", lambda e: self._b24_toggle())
+        self.b24_status = ttk.Label(f, text="", wraplength=380)
+        self.b24_status.pack(anchor="w", pady=(6, 0))
+        self.b24_code = ttk.Label(f, text="", font=("Consolas", 22, "bold"))
+        self.b24_code.pack(anchor="w")
+        self.b24_open = ttk.Button(f, text="Открыть страницу подтверждения",
+                                   command=lambda: __import__("webbrowser").open(self.m.b24.pair_url))
+        ttk.Label(f, text="Кто есть кто", font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(12, 0))
+        ttk.Label(f, wraplength=380, style="Small.TLabel",
+                  text="Свяжите людей из базы с сотрудниками портала — по ним работают события и сообщения."
+                  ).pack(anchor="w")
+        self.b24_links = Scrollable(f)
+        self.b24_links.pack(fill="both", expand=True, pady=4)
+
+    def _b24_toggle(self):
+        b = self.m.b24
+        if b.connected or b.state == "pairing":
+            b.disconnect()
+        else:
+            b.connect(self.b24_url.get())
+
+    def update_b24(self):
+        b = self.m.b24
+        if not b:
+            return
+        sig = (b.state, b.status, b.code, b.people_rev, self.m.revision, self.m.s.get("b24_user_name"))
+        if sig == self._b24_sig:
+            return
+        self._b24_sig = sig
+        busy = b.connected or b.state == "pairing"
+        self.b24_btn.config(text="Отключить" if busy else "Подключить")
+        self.b24_url.config(state="disabled" if busy else "normal")
+        text = b.status
+        if b.connected and self.m.s.get("b24_user_name"):
+            text = f"{b.status} · учётка: {self.m.s['b24_user_name']}"
+        self.b24_status.config(text=text, foreground="#c0392b" if b.state == "error" else
+                               ("#1a9b4b" if b.state == "connected" else ""))
+        self.b24_code.config(text=b.code)
+        if b.code and b.pair_url:
+            self.b24_open.pack(anchor="w", after=self.b24_code)
+        else:
+            self.b24_open.pack_forget()
+        self.b24_links.clear()
+        inner = self.b24_links.inner
+        if not b.connected:
+            ttk.Label(inner, text="Сначала подключитесь к порталу.", style="Small.TLabel").pack(anchor="w")
+            return
+        if not b.people:
+            ttk.Label(inner, text="Загружаю сотрудников…", style="Small.TLabel").pack(anchor="w")
+            return
+        names = ["— не связан —"] + [e["name"] + (f" ({e['position']})" if e.get("position") else "") for e in b.people]
+        ids = [0] + [int(e["id"]) for e in b.people]
+        for p in self.m.people:
+            r = ttk.Frame(inner)
+            r.pack(fill="x", pady=1)
+            ttk.Label(r, text=p.name, width=14).pack(side="left")
+            cb = ttk.Combobox(r, values=names, state="readonly")
+            cb.current(ids.index(p.b24) if p.b24 in ids else 0)
+            cb.pack(side="left", fill="x", expand=True, padx=4)
+            cb.bind("<<ComboboxSelected>>", lambda e, uid=p.id, c=cb: self.m.link_b24(uid, ids[c.current()]))
+        if not self.m.people:
+            ttk.Label(inner, text="В базе пока никого — добавьте людей на вкладке «Люди».",
+                      style="Small.TLabel").pack(anchor="w")
 
     def _check(self, parent, text, key):
         v = tk.BooleanVar(value=bool(self.m.s[key]))

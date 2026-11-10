@@ -74,7 +74,9 @@ final class Model: ObservableObject {
     @Published var enrollLeft = 0
     @Published var presentNames: [String] = []
 
-    private let d = UserDefaults.standard
+    /// --defaults <имя>: отдельные настройки для тестов
+    private let d = Args.value("--defaults").flatMap { UserDefaults(suiteName: $0) } ?? .standard
+    let b24: B24Client
     @Published var threshold: Double { didSet { d.set(threshold, forKey: "threshold"); rec.threshold = Float(threshold) } }
     @Published var absence: Double { didSet { d.set(absence, forKey: "absence"); presence.absence = absence } }
     @Published var speak: Bool { didSet { d.set(speak, forKey: "speak") } }
@@ -91,6 +93,7 @@ final class Model: ObservableObject {
 
     init(dbPath: String = Store.defaultPath, fakeFolder: URL? = nil) {
         store = Store(path: dbPath)
+        b24 = B24Client(defaults: d)
         self.fakeFolder = fakeFolder
         d.register(defaults: ["threshold": 0.95, "absence": 3.0, "speak": true, "greetUnknown": false,
                               "autoLearn": false, "mirror": true])
@@ -110,6 +113,11 @@ final class Model: ObservableObject {
         rec.threshold = Float(threshold)
         presence.absence = absence
         speaker.voiceId = voiceId
+        b24.onNote = { [weak self] s in self?.log(s) }
+        b24.onMessage = { [weak self] s in
+            self?.log("🔊 " + s)
+            if !Args.has("--mute") { self?.speaker.say(s) }
+        }
         refreshPeople()
         migrateEmbeddings()
         rec.rebuild(store.samples())
@@ -161,6 +169,15 @@ final class Model: ObservableObject {
     func refreshPeople() {
         people = store.people()
         revision += 1
+        b24.setPersons(people)
+    }
+
+    func b24Of(_ id: Int64) -> Int { people.first { $0.id == id }?.b24 ?? 0 }
+
+    /// Связать человека из базы с сотрудником портала (0 — отвязать).
+    func linkB24(_ id: Int64, _ b24: Int) {
+        store.setB24(id, b24)
+        refreshPeople()
     }
 
     func name(_ id: Int64?) -> String {
@@ -223,6 +240,7 @@ final class Model: ObservableObject {
         for u in bye { greet(u, hello: false) }
         for u in hello { greet(u, hello: true) }
         presentNames = presence.present.filter { $0 > 0 }.map { name($0) }.sorted()
+        b24.setPresent(presence.present.filter { $0 > 0 }.map { Int64(b24Of($0)) })
     }
 
     private func greet(_ u: Int64, hello: Bool) {
@@ -230,6 +248,13 @@ final class Model: ObservableObject {
         let text = hello ? "Привет, \(who)!" : "Пока, \(who)!"
         log((hello ? "👋 " : "🚪 ") + text)
         if speak && !Args.has("--mute") { speaker.say(text) }
+        b24.event(hello ? "appeared" : "left", user: u > 0 ? Int64(b24Of(u)) : 0, name: u > 0 ? who : "")
+    }
+
+    /// Для --b24-test: приветствие/прощание без камеры.
+    func greetForTest(_ u: Int64, hello: Bool) {
+        greet(u, hello: hello)
+        b24.setPresent(hello ? [Int64(b24Of(u))] : [])
     }
 
     func log(_ s: String) {

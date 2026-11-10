@@ -6,6 +6,7 @@ struct Person: Identifiable, Hashable {
     var id: Int64
     var name: String
     var count: Int
+    var b24: Int = 0        // id сотрудника в Битрикс24 (0 — не связан)
 }
 
 /// Образец лица: выровненный кроп 160×160 (JPEG) + вектор признаков.
@@ -36,6 +37,7 @@ final class Store {
             emb BLOB, version INTEGER, jpeg BLOB, created REAL, source TEXT);
         CREATE INDEX IF NOT EXISTS samples_user ON samples(user_id);
         """)
+        if !columnExists("users", "b24") { exec("ALTER TABLE users ADD COLUMN b24 INTEGER DEFAULT 0") }
     }
     deinit { sqlite3_close(db) }
 
@@ -76,7 +78,7 @@ final class Store {
 
     func people() -> [Person] {
         let st = prepare("""
-            SELECT u.id, u.name, (SELECT COUNT(*) FROM samples s WHERE s.user_id=u.id)
+            SELECT u.id, u.name, (SELECT COUNT(*) FROM samples s WHERE s.user_id=u.id), COALESCE(u.b24, 0)
             FROM users u ORDER BY u.name COLLATE NOCASE
             """)
         defer { sqlite3_finalize(st) }
@@ -84,7 +86,8 @@ final class Store {
         while sqlite3_step(st) == SQLITE_ROW {
             out.append(Person(id: sqlite3_column_int64(st, 0),
                               name: String(cString: sqlite3_column_text(st, 1)),
-                              count: Int(sqlite3_column_int(st, 2))))
+                              count: Int(sqlite3_column_int(st, 2)),
+                              b24: Int(sqlite3_column_int(st, 3))))
         }
         return out
     }
@@ -104,6 +107,23 @@ final class Store {
         sqlite3_bind_text(st, 1, name, -1, TRANSIENT)
         sqlite3_bind_int64(st, 2, id)
         sqlite3_step(st)
+    }
+
+    func setB24(_ id: Int64, _ b24: Int) {
+        let st = prepare("UPDATE users SET b24=? WHERE id=?")
+        defer { sqlite3_finalize(st) }
+        sqlite3_bind_int64(st, 1, Int64(b24))
+        sqlite3_bind_int64(st, 2, id)
+        sqlite3_step(st)
+    }
+
+    private func columnExists(_ table: String, _ col: String) -> Bool {
+        let st = prepare("PRAGMA table_info(\(table))")
+        defer { sqlite3_finalize(st) }
+        while sqlite3_step(st) == SQLITE_ROW {
+            if String(cString: sqlite3_column_text(st, 1)) == col { return true }
+        }
+        return false
     }
 
     func deletePerson(_ id: Int64) {

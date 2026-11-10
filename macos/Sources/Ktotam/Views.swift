@@ -12,7 +12,7 @@ func fmt(_ d: Float) -> String { d > 8 ? "—" : String(format: "%.2f", d) }
 
 struct ContentView: View {
     @EnvironmentObject var m: Model
-    @State private var tab = 0
+    @State private var tab = Int(Args.value("--tab") ?? "") ?? 0
     @State private var askName = false
     @State private var newName = ""
     @State private var nameTarget: Target = .none
@@ -34,6 +34,7 @@ struct ContentView: View {
                     Text("Проверка").tag(1)
                     Text("Журнал").tag(2)
                     Text("Настройки").tag(3)
+                    Text("Б24").tag(4)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -41,6 +42,7 @@ struct ContentView: View {
                 case 0: PeoplePane(ask: ask)
                 case 1: ReviewPane(ask: ask)
                 case 2: EventsPane()
+                case 4: B24Pane(b: m.b24)
                 default: SettingsPane()
                 }
             }
@@ -406,4 +408,60 @@ struct SettingsPane: View {
         }
         .formStyle(.grouped)
     }
+}
+
+/// Вкладка «Б24»: подключение к порталу и «кто есть кто».
+struct B24Pane: View {
+    @EnvironmentObject var m: Model
+    @ObservedObject var b: B24Client
+    @State private var address = ""
+
+    var body: some View {
+        Form {
+            Section("Битрикс24") {
+                Text("Портал узнаёт, кто из сотрудников перед экраном, и присылает голосовые сообщения. "
+                     + "На портал уходят только «появился / ушёл» и время — снимки и данные лиц остаются здесь.")
+                    .font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    TextField("Адрес", text: $address, prompt: Text("crm.example.ru"))
+                        .disabled(busy).onSubmit(toggle)
+                    Button(busy ? "Отключить" : "Подключить", action: toggle)
+                }
+                if !b.status.isEmpty {
+                    Text(b.state == .connected && !b.userName.isEmpty ? "\(b.status) · учётка: \(b.userName)" : b.status)
+                        .foregroundStyle(b.state == .error ? Color.red : b.state == .connected ? Color.green : Color.primary)
+                }
+                if !b.code.isEmpty {
+                    Text(b.code).font(.system(size: 26, weight: .bold, design: .monospaced)).textSelection(.enabled)
+                    if let u = b.pairURL { Button("Открыть страницу подтверждения") { NSWorkspace.shared.open(u) } }
+                }
+            }
+            Section("Кто есть кто") {
+                if !b.connected {
+                    Text("Сначала подключитесь к порталу.").foregroundStyle(.secondary)
+                } else if b.people.isEmpty {
+                    Text("Загружаю сотрудников…").foregroundStyle(.secondary)
+                } else if m.people.isEmpty {
+                    Text("В базе пока никого — добавьте людей на вкладке «Люди».").foregroundStyle(.secondary)
+                } else {
+                    ForEach(m.people) { p in
+                        Picker(p.name, selection: Binding(get: { p.b24 }, set: { m.linkB24(p.id, $0) })) {
+                            Text("— не связан —").tag(0)
+                            ForEach(b.people) { e in
+                                Text(e.position.isEmpty ? e.name : "\(e.name) (\(e.position))").tag(e.id)
+                            }
+                        }
+                    }
+                    Text("Свяжите людей из базы с сотрудниками портала — по ним работают события и сообщения.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { address = b.url.replacingOccurrences(of: "https://", with: "") }
+    }
+
+    var busy: Bool { b.connected || b.state == .pairing }
+
+    func toggle() { busy ? b.disconnect() : b.connect(address) }
 }

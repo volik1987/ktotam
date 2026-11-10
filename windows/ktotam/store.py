@@ -16,6 +16,7 @@ class Person:
     id: int
     name: str
     count: int
+    b24: int = 0           # id сотрудника в Битрикс24 (0 — не связан)
 
 
 @dataclass
@@ -27,7 +28,9 @@ class Sample:
 
 
 def data_dir() -> str:
-    if sys.platform == "win32":
+    if os.environ.get("KTOTAM_DATA"):          # для тестов: своя папка с базой и настройками
+        d = os.environ["KTOTAM_DATA"]
+    elif sys.platform == "win32":
         base = os.environ.get("APPDATA") or os.path.expanduser("~")
         d = os.path.join(base, "Ktotam")
     elif sys.platform == "darwin":
@@ -55,12 +58,14 @@ class Store:
                 emb BLOB, version INTEGER, jpeg BLOB, created REAL, source TEXT);
             CREATE INDEX IF NOT EXISTS samples_user ON samples(user_id);
         """)
+        if "b24" not in [r[1] for r in self.db.execute("PRAGMA table_info(users)")]:
+            self.db.execute("ALTER TABLE users ADD COLUMN b24 INTEGER DEFAULT 0")
         self.db.commit()
 
     # --- люди
     def people(self) -> list[Person]:
         rows = self.db.execute("""
-            SELECT u.id, u.name, (SELECT COUNT(*) FROM samples s WHERE s.user_id=u.id)
+            SELECT u.id, u.name, (SELECT COUNT(*) FROM samples s WHERE s.user_id=u.id), COALESCE(u.b24, 0)
             FROM users u ORDER BY u.name COLLATE NOCASE""").fetchall()
         return [Person(*r) for r in rows]
 
@@ -71,6 +76,10 @@ class Store:
 
     def rename(self, uid: int, name: str):
         self.db.execute("UPDATE users SET name=? WHERE id=?", (name, uid))
+        self.db.commit()
+
+    def set_b24(self, uid: int, b24: int):
+        self.db.execute("UPDATE users SET b24=? WHERE id=?", (int(b24), uid))
         self.db.commit()
 
     def delete_person(self, uid: int):

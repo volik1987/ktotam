@@ -9,6 +9,7 @@
   --test-fix <имя>         через 3 с поправить лицо в кадре на этого человека
   --snapshot <png> <сек>   снимок окна через N секунд и выход
   --log <файл>             весь вывод в файл (у собранного .exe нет консоли)
+  --tab <номер>            открыть вкладку справа (0 — «Люди», 4 — «Б24»)
 """
 import argparse
 import os
@@ -25,6 +26,7 @@ def main():
     ap.add_argument("--test-fix")
     ap.add_argument("--snapshot", nargs=2, metavar=("PNG", "SEC"))
     ap.add_argument("--log")
+    ap.add_argument("--tab", type=int)
     a, _ = ap.parse_known_args()
 
     if a.log:
@@ -63,6 +65,8 @@ def main():
     root = tk.Tk()
     model = Model(db, engine, mute=a.mute)
     app = App(root, model, Camera(engine), fake_folder=a.fake_camera)
+    if a.tab is not None:
+        app.nb.select(a.tab)
 
     if a.test_fix:
         def fix():
